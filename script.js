@@ -21,6 +21,31 @@ function init() {
     checkAdmin();
 }
 
+// --- Безопасные форматировщики ---
+function safeDate(dateStr) {
+    if (!dateStr) return '—';
+    try {
+        return new Date(dateStr).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+    } catch { return '—'; }
+}
+
+function safePrice(price) {
+    const p = parseInt(price);
+    if (isNaN(p) || p <= 0) return '0';
+    return p.toLocaleString('ru-RU');
+}
+
+function safeText(text, fallback) {
+    return text || fallback || '';
+}
+
+function safeMaxPeople(maxPeople) {
+    if (!maxPeople || maxPeople === '0' || maxPeople === 'undefined' || maxPeople === 'null') {
+        return 'Без ограничений';
+    }
+    return `До ${maxPeople} чел.`;
+}
+
 // --- НАВИГАЦИЯ ---
 function openScreen(screen) {
     if (isAnimating) return;
@@ -53,7 +78,7 @@ function openScreen(screen) {
         backBtn.style.display = 'block';
 
         if (screen === 'excursions') loadExcursionsAndShow();
-        else if (screen === 'myBookings') showMyBookings();
+        else if (screen === 'myBookings') loadMyBookingsAndShow();
         else if (screen === 'admin') showAdminPanel();
         else if (screen === 'createExcursion') { resetExcursionForm(); showExcursionStep1(); }
         else if (screen === 'createExcursionStep2') showExcursionStep2();
@@ -100,7 +125,7 @@ function goBack() {
         } else {
             if (backBtn) backBtn.style.display = 'block';
             if (previousScreen === 'excursions') loadExcursionsAndShow();
-            else if (previousScreen === 'myBookings') showMyBookings();
+            else if (previousScreen === 'myBookings') loadMyBookingsAndShow();
             else if (previousScreen === 'admin') showAdminPanel();
             else if (previousScreen === 'createExcursion') showExcursionStep1();
             else if (previousScreen === 'createExcursionStep2') showExcursionStep2();
@@ -139,8 +164,7 @@ function goToMain() {
     }, 250);
 }
 
-// --- ЗАГРУЗКА ДАННЫХ С СЕРВЕРА ---
-
+// --- ЗАГРУЗКА ДАННЫХ ---
 async function loadExcursions() {
     try {
         const response = await fetch(`${API_URL}/excursions`);
@@ -156,20 +180,30 @@ async function loadExcursionsAndShow() {
     showExcursionsList();
 }
 
+async function loadMyBookings() {
+    try {
+        const response = await fetch(`${API_URL}/bookings`);
+        myBookings = await response.json();
+    } catch (err) {
+        console.error('Ошибка загрузки записей:', err);
+        myBookings = [];
+    }
+}
+
+async function loadMyBookingsAndShow() {
+    await loadMyBookings();
+    showMyBookings();
+}
+
 async function loadAllRequestsAndShow() {
     await loadExcursions();
+    await loadMyBookings();
     showAllRequests();
 }
 
 async function loadRequestDetailAndShow(excursionId) {
     await loadExcursions();
-    try {
-        const response = await fetch(`${API_URL}/bookings/${excursionId}`);
-        const serverBookings = await response.json();
-        myBookings = [...serverBookings];
-    } catch (err) {
-        console.error('Ошибка загрузки заявок:', err);
-    }
+    await loadMyBookings();
     showRequestDetail(excursionId);
 }
 
@@ -183,26 +217,21 @@ function showExcursionsList() {
     }
     let html = '<h2>Экскурсии</h2>';
     excursions.forEach((exc, index) => {
-        const price = exc.price || 0;
-        const formattedPrice = price.toLocaleString('ru-RU');
-        const formattedDate = exc.date ? new Date(exc.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
-        const deadlineDate = exc.deadline ? new Date(exc.deadline).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : '—';
-        const maxPeopleText = !exc.maxPeople || exc.maxPeople === '0' ? 'Без ограничений' : `До ${exc.maxPeople} чел.`;
         html += `
             <div class="excursion-card" onclick="openScreen('excursion/${exc.id}')" style="animation-delay: ${index * 0.08}s;">
                 <div class="excursion-card-header">
-                    <div class="excursion-card-title">${exc.name || 'Без названия'}</div>
-                    <div class="excursion-card-price">${formattedPrice} ₽</div>
+                    <div class="excursion-card-title">${safeText(exc.name, 'Без названия')}</div>
+                    <div class="excursion-card-price">${safePrice(exc.price)} ₽</div>
                 </div>
                 <div class="excursion-card-info">
-                    <div class="excursion-info-badge"><span class="badge-icon">📅</span> ${formattedDate}</div>
-                    <div class="excursion-info-badge"><span class="badge-icon">⏰</span> ${exc.time || '—'}</div>
-                    <div class="max-people-badge"><span class="badge-icon">👥</span> ${maxPeopleText}</div>
+                    <div class="excursion-info-badge"><span class="badge-icon">📅</span> ${safeDate(exc.date)}</div>
+                    <div class="excursion-info-badge"><span class="badge-icon">⏰</span> ${safeText(exc.time, '—')}</div>
+                    <div class="max-people-badge"><span class="badge-icon">👥</span> ${safeMaxPeople(exc.maxPeople || exc.max_people)}</div>
                 </div>
-                <div class="excursion-card-description">${exc.description || ''}</div>
+                <div class="excursion-card-description">${safeText(exc.description, '')}</div>
                 <div class="excursion-card-footer">
                     <span>Запись открыта</span>
-                    <span class="record-deadline">📆 до ${deadlineDate}</span>
+                    <span class="record-deadline">📆 до ${safeDate(exc.deadline)}</span>
                 </div>
             </div>
         `;
@@ -216,24 +245,19 @@ function showExcursionDetail(id) {
     if (!exc) return;
     const content = document.getElementById('content');
     if (!content) return;
-    const price = exc.price || 0;
-    const formattedPrice = price.toLocaleString('ru-RU');
-    const formattedDate = exc.date ? new Date(exc.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
-    const deadlineDate = exc.deadline ? new Date(exc.deadline).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : '—';
-    const maxPeopleText = !exc.maxPeople || exc.maxPeople === '0' ? 'Без ограничений' : `До ${exc.maxPeople} человек`;
     content.innerHTML = `
         <div class="excursion-card" style="cursor: default; animation: fadeInScale 0.5s ease-out forwards;">
             <div class="excursion-card-header">
-                <div class="excursion-card-title">${exc.name || 'Без названия'}</div>
-                <div class="excursion-card-price">${formattedPrice} ₽</div>
+                <div class="excursion-card-title">${safeText(exc.name, 'Без названия')}</div>
+                <div class="excursion-card-price">${safePrice(exc.price)} ₽</div>
             </div>
             <div class="excursion-card-info">
-                <div class="excursion-info-badge"><span class="badge-icon">📅</span> ${formattedDate}</div>
-                <div class="excursion-info-badge"><span class="badge-icon">⏰</span> ${exc.time || '—'}</div>
-                <div class="max-people-badge"><span class="badge-icon">👥</span> ${maxPeopleText}</div>
-                <div class="excursion-info-badge"><span class="badge-icon">📆</span> Запись до ${deadlineDate}</div>
+                <div class="excursion-info-badge"><span class="badge-icon">📅</span> ${safeDate(exc.date)}</div>
+                <div class="excursion-info-badge"><span class="badge-icon">⏰</span> ${safeText(exc.time, '—')}</div>
+                <div class="max-people-badge"><span class="badge-icon">👥</span> ${safeMaxPeople(exc.maxPeople || exc.max_people)}</div>
+                <div class="excursion-info-badge"><span class="badge-icon">📆</span> Запись до ${safeDate(exc.deadline)}</div>
             </div>
-            <div class="excursion-card-description">${exc.description || ''}</div>
+            <div class="excursion-card-description">${safeText(exc.description, '')}</div>
         </div>
         <button class="save-form-btn" onclick="openScreen('booking/${exc.id}')">📝 Записаться на экскурсию</button>
     `;
@@ -245,19 +269,16 @@ function showBookingForm(id) {
     if (!exc) return;
     const content = document.getElementById('content');
     if (!content) return;
-    const price = exc.price || 0;
-    const formattedPrice = price.toLocaleString('ru-RU');
-    const formattedDate = exc.date ? new Date(exc.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
     let html = `
         <h2>Запись на экскурсию</h2>
         <div class="excursion-card" style="cursor: default; margin-bottom: 20px;">
             <div class="excursion-card-header">
-                <div class="excursion-card-title" style="font-size: 17px;">${exc.name || 'Без названия'}</div>
-                <div class="excursion-card-price" style="font-size: 18px;">${formattedPrice} ₽</div>
+                <div class="excursion-card-title" style="font-size: 17px;">${safeText(exc.name, 'Без названия')}</div>
+                <div class="excursion-card-price" style="font-size: 18px;">${safePrice(exc.price)} ₽</div>
             </div>
             <div class="excursion-card-info">
-                <div class="excursion-info-badge"><span class="badge-icon">📅</span> ${formattedDate}</div>
-                <div class="excursion-info-badge"><span class="badge-icon">⏰</span> ${exc.time || '—'}</div>
+                <div class="excursion-info-badge"><span class="badge-icon">📅</span> ${safeDate(exc.date)}</div>
+                <div class="excursion-info-badge"><span class="badge-icon">⏰</span> ${safeText(exc.time, '—')}</div>
             </div>
         </div>
         <div class="form-builder">
@@ -265,7 +286,7 @@ function showBookingForm(id) {
     if (exc.questions && exc.questions.length > 0) {
         exc.questions.forEach((q, i) => {
             html += '<div class="form-group">';
-            html += `<label>${q.text || ''}</label>`;
+            html += `<label>${safeText(q.text, '')}</label>`;
             if (q.type === 'text') html += `<input type="text" id="answer_${i}" placeholder="Ваш ответ">`;
             else if (q.type === 'radio') {
                 (q.options || []).forEach((opt, oi) => {
@@ -334,15 +355,14 @@ function showMyBookings() {
     }
     let html = '<h2>Мои записи</h2>';
     myBookings.forEach((booking, index) => {
-        const formattedDate = booking.date ? new Date(booking.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
         html += `
             <div class="excursion-card" style="animation-delay: ${index * 0.08}s;">
                 <div class="excursion-card-header">
-                    <div class="excursion-card-title">${booking.excursionName || 'Без названия'}</div>
+                    <div class="excursion-card-title">${safeText(booking.excursionName || booking.excursion_name, 'Без названия')}</div>
                 </div>
                 <div class="excursion-card-info">
-                    <div class="excursion-info-badge"><span class="badge-icon">📅</span> ${formattedDate}</div>
-                    <div class="excursion-info-badge"><span class="badge-icon">⏰</span> ${booking.time || '—'}</div>
+                    <div class="excursion-info-badge"><span class="badge-icon">📅</span> ${safeDate(booking.date)}</div>
+                    <div class="excursion-info-badge"><span class="badge-icon">⏰</span> ${safeText(booking.time, '—')}</div>
                 </div>
                 <div class="excursion-card-footer"><span>✅ Запись подтверждена</span></div>
                 <button class="cancel-booking-btn" onclick="cancelBooking(${booking.id})">❌ Отменить запись</button>
@@ -378,7 +398,7 @@ function showAdminPanel() {
     `;
 }
 
-// --- ВСЕ ЗАЯВКИ (АДМИН) ---
+// --- ВСЕ ЗАЯВКИ ---
 function showAllRequests() {
     const content = document.getElementById('content');
     if (!content) return;
@@ -391,18 +411,20 @@ function showAllRequests() {
     let html = '<h2>Заявки</h2>';
     
     excursions.forEach((exc, index) => {
-        const bookingsForExcursion = myBookings.filter(b => b.excursionId === exc.id);
-        const formattedDate = exc.date ? new Date(exc.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
-        
+        const bookingsForExcursion = myBookings.filter(b => b.excursionId === exc.id || b.excursion_id === exc.id);
         html += `
-            <div class="excursion-card" style="cursor: pointer; animation-delay: ${index * 0.08}s;" onclick="openScreen('requestDetail/${exc.id}')">
+            <div class="excursion-card" style="animation-delay: ${index * 0.08}s;">
                 <div class="excursion-card-header">
-                    <div class="excursion-card-title">${exc.name || 'Без названия'}</div>
+                    <div class="excursion-card-title">${safeText(exc.name, 'Без названия')}</div>
                     <div class="excursion-card-price">${bookingsForExcursion.length} заявок</div>
                 </div>
                 <div class="excursion-card-info">
-                    <div class="excursion-info-badge"><span class="badge-icon">📅</span> ${formattedDate}</div>
-                    <div class="excursion-info-badge"><span class="badge-icon">⏰</span> ${exc.time || '—'}</div>
+                    <div class="excursion-info-badge"><span class="badge-icon">📅</span> ${safeDate(exc.date)}</div>
+                    <div class="excursion-info-badge"><span class="badge-icon">⏰</span> ${safeText(exc.time, '—')}</div>
+                </div>
+                <div style="display: flex; gap: 8px; margin-top: 10px;">
+                    <button class="save-form-btn" style="flex: 1;" onclick="event.stopPropagation(); openScreen('requestDetail/${exc.id}')">👁 Смотреть заявки</button>
+                    <button class="cancel-booking-btn" style="flex: 1;" onclick="event.stopPropagation(); deleteExcursion(${exc.id})">🗑 Удалить</button>
                 </div>
             </div>
         `;
@@ -411,22 +433,34 @@ function showAllRequests() {
     content.innerHTML = html;
 }
 
-// --- ДЕТАЛИ ЗАЯВОК ПО ЭКСКУРСИИ ---
+async function deleteExcursion(id) {
+    if (!confirm('Вы уверены, что хотите удалить эту экскурсию?')) return;
+    try {
+        await fetch(`${API_URL}/excursions/${id}`, { method: 'DELETE' });
+        alert('Экскурсия удалена');
+        excursions = excursions.filter(e => e.id !== id);
+        showAllRequests();
+    } catch (err) {
+        console.error('Ошибка удаления:', err);
+        alert('Ошибка при удалении');
+    }
+}
+
+// --- ДЕТАЛИ ЗАЯВОК ---
 function showRequestDetail(excursionId) {
     const exc = excursions.find(e => e.id === excursionId);
     if (!exc) return;
     
     const content = document.getElementById('content');
     if (!content) return;
-    const bookingsForExcursion = myBookings.filter(b => b.excursionId === excursionId);
-    const formattedDate = exc.date ? new Date(exc.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+    const bookingsForExcursion = myBookings.filter(b => b.excursionId === excursionId || b.excursion_id === excursionId);
     
     let html = `
-        <h2>Заявки: ${exc.name || 'Без названия'}</h2>
+        <h2>Заявки: ${safeText(exc.name, 'Без названия')}</h2>
         <div class="excursion-card" style="cursor: default; margin-bottom: 16px;">
             <div class="excursion-card-info">
-                <div class="excursion-info-badge"><span class="badge-icon">📅</span> ${formattedDate}</div>
-                <div class="excursion-info-badge"><span class="badge-icon">⏰</span> ${exc.time || '—'}</div>
+                <div class="excursion-info-badge"><span class="badge-icon">📅</span> ${safeDate(exc.date)}</div>
+                <div class="excursion-info-badge"><span class="badge-icon">⏰</span> ${safeText(exc.time, '—')}</div>
                 <div class="excursion-info-badge"><span class="badge-icon">👥</span> ${bookingsForExcursion.length} чел.</div>
             </div>
         </div>
@@ -440,7 +474,7 @@ function showRequestDetail(excursionId) {
             html += `
                 <div class="form-group" style="cursor: pointer; animation-delay: ${index * 0.05}s;" onclick="showUserAnswers(${booking.id})">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-weight: 600; font-size: 16px;">${booking.userName || 'Гость'}</span>
+                        <span style="font-weight: 600; font-size: 16px;">${safeText(booking.userName, 'Гость')}</span>
                         <span style="color: #888; font-size: 14px;">ID: ${booking.id}</span>
                     </div>
                 </div>
@@ -452,25 +486,24 @@ function showRequestDetail(excursionId) {
     content.innerHTML = html;
 }
 
-// --- ПРОСМОТР ОТВЕТОВ ПОЛЬЗОВАТЕЛЯ ---
+// --- ПРОСМОТР ОТВЕТОВ ---
 function showUserAnswers(bookingId) {
     const booking = myBookings.find(b => b.id === bookingId);
     if (!booking) return;
     
     const content = document.getElementById('content');
     if (!content) return;
-    const formattedDate = booking.date ? new Date(booking.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
     
     let html = `
         <h2>Заявка #${booking.id}</h2>
         <div class="excursion-card" style="cursor: default; margin-bottom: 20px;">
             <div class="excursion-card-header">
-                <div class="excursion-card-title">${booking.excursionName || 'Без названия'}</div>
+                <div class="excursion-card-title">${safeText(booking.excursionName || booking.excursion_name, 'Без названия')}</div>
             </div>
             <div class="excursion-card-info">
-                <div class="excursion-info-badge"><span class="badge-icon">📅</span> ${formattedDate}</div>
-                <div class="excursion-info-badge"><span class="badge-icon">⏰</span> ${booking.time || '—'}</div>
-                <div class="excursion-info-badge"><span class="badge-icon">👤</span> ${booking.userName || 'Гость'}</div>
+                <div class="excursion-info-badge"><span class="badge-icon">📅</span> ${safeDate(booking.date)}</div>
+                <div class="excursion-info-badge"><span class="badge-icon">⏰</span> ${safeText(booking.time, '—')}</div>
+                <div class="excursion-info-badge"><span class="badge-icon">👤</span> ${safeText(booking.userName, 'Гость')}</div>
             </div>
         </div>
         <h3 style="margin-bottom: 12px;">Ответы на вопросы</h3>
@@ -481,8 +514,8 @@ function showUserAnswers(bookingId) {
         booking.answers.forEach((a, i) => {
             html += `
                 <div class="form-group" style="animation-delay: ${i * 0.05}s;">
-                    <label>${a.question || ''}</label>
-                    <p style="font-size: 15px; color: #333; padding: 8px 0;">${a.answer || 'Нет ответа'}</p>
+                    <label>${safeText(a.question, '')}</label>
+                    <p style="font-size: 15px; color: #333; padding: 8px 0;">${safeText(a.answer, 'Нет ответа')}</p>
                 </div>
             `;
         });
@@ -526,7 +559,7 @@ function goToStep2() {
     if (dateField) savedDate = dateField.value;
     if (timeField) savedTime = timeField.value;
     if (priceField) savedPrice = priceField.value;
-    if (maxPeopleField) savedMaxPeople = maxPeopleField.value;
+    if (maxPeopleField) savedMaxPeople = maxPeopleField.value || '0';
     if (deadlineField) savedDeadline = deadlineField.value;
     
     if (!savedDate) { alert('Укажите дату экскурсии'); return; }
@@ -584,12 +617,7 @@ function addQuestion() {
     questions.push({ text: '', type: 'text', options: [] });
     showExcursionStep2();
 }
-
-function removeQuestion(index) {
-    questions.splice(index, 1);
-    showExcursionStep2();
-}
-
+function removeQuestion(index) { questions.splice(index, 1); showExcursionStep2(); }
 function updateQuestionText(index, value) { questions[index].text = value; }
 function updateQuestionType(index, value) {
     questions[index].type = value;
@@ -601,10 +629,7 @@ function addOption(index) {
     questions[index].options.push('');
     showExcursionStep2();
 }
-function removeOption(qi, oi) {
-    questions[qi].options.splice(oi, 1);
-    showExcursionStep2();
-}
+function removeOption(qi, oi) { questions[qi].options.splice(oi, 1); showExcursionStep2(); }
 function updateOption(qi, oi, value) { questions[qi].options[oi] = value; }
 
 async function saveExcursion() {

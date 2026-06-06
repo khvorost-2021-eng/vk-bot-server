@@ -33,7 +33,7 @@ async function initDatabase() {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS questions (
             id SERIAL PRIMARY KEY,
-            excursion_id INTEGER REFERENCES excursions(id),
+            excursion_id INTEGER REFERENCES excursions(id) ON DELETE CASCADE,
             text TEXT NOT NULL,
             type TEXT NOT NULL DEFAULT 'text',
             options TEXT DEFAULT '[]'
@@ -43,7 +43,7 @@ async function initDatabase() {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS bookings (
             id SERIAL PRIMARY KEY,
-            excursion_id INTEGER REFERENCES excursions(id),
+            excursion_id INTEGER REFERENCES excursions(id) ON DELETE CASCADE,
             user_name TEXT NOT NULL,
             answers TEXT NOT NULL DEFAULT '[]',
             created_at TEXT NOT NULL
@@ -55,6 +55,7 @@ async function initDatabase() {
 
 // === API ===
 
+// Получить все экскурсии
 app.get('/api/excursions', async (req, res) => {
     try {
         const { rows: excursions } = await pool.query('SELECT * FROM excursions ORDER BY date ASC');
@@ -70,6 +71,7 @@ app.get('/api/excursions', async (req, res) => {
     }
 });
 
+// Создать экскурсию
 app.post('/api/excursions', async (req, res) => {
     try {
         const { name, description, date, time, price, deadline, maxPeople, questions } = req.body;
@@ -93,6 +95,19 @@ app.post('/api/excursions', async (req, res) => {
     }
 });
 
+// Удалить экскурсию
+app.delete('/api/excursions/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM questions WHERE excursion_id = $1', [req.params.id]);
+        await pool.query('DELETE FROM bookings WHERE excursion_id = $1', [req.params.id]);
+        await pool.query('DELETE FROM excursions WHERE id = $1', [req.params.id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Отправить заявку
 app.post('/api/bookings', async (req, res) => {
     try {
         const { excursionId, userName, answers } = req.body;
@@ -106,18 +121,40 @@ app.post('/api/bookings', async (req, res) => {
     }
 });
 
-app.get('/api/bookings/:excursionId', async (req, res) => {
+// Получить все заявки
+app.get('/api/bookings', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT * FROM bookings WHERE excursion_id = $1 ORDER BY created_at DESC', [req.params.excursionId]);
+        const { rows } = await pool.query('SELECT * FROM bookings ORDER BY created_at DESC');
         res.json(rows.map(r => ({
-            id: r.id, excursionId: r.excursion_id, userName: r.user_name,
-            answers: JSON.parse(r.answers || '[]'), createdAt: r.created_at
+            id: r.id,
+            excursionId: r.excursion_id,
+            excursionName: '',
+            userName: r.user_name,
+            answers: JSON.parse(r.answers || '[]'),
+            createdAt: r.created_at
         })));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
+// Получить заявки по экскурсии
+app.get('/api/bookings/:excursionId', async (req, res) => {
+    try {
+        const { rows } = await pool.query('SELECT * FROM bookings WHERE excursion_id = $1 ORDER BY created_at DESC', [req.params.excursionId]);
+        res.json(rows.map(r => ({
+            id: r.id,
+            excursionId: r.excursion_id,
+            userName: r.user_name,
+            answers: JSON.parse(r.answers || '[]'),
+            createdAt: r.created_at
+        })));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Отменить заявку
 app.delete('/api/bookings/:id', async (req, res) => {
     try {
         await pool.query('DELETE FROM bookings WHERE id = $1', [req.params.id]);
@@ -127,6 +164,7 @@ app.delete('/api/bookings/:id', async (req, res) => {
     }
 });
 
+// Проверка админа
 app.post('/api/admin/check', (req, res) => {
     const ADMIN_ID = 123456789;
     res.json({ admin: req.body.userId === ADMIN_ID });
