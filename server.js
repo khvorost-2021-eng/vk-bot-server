@@ -38,6 +38,16 @@ async function initDatabase() {
         )
     `);
 
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS bookings (
+            id SERIAL PRIMARY KEY,
+            excursion_id INTEGER REFERENCES excursions(id) ON DELETE CASCADE,
+            user_name TEXT NOT NULL,
+            answers TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL
+        )
+    `);
+
     console.log('База данных готова');
 }
 
@@ -84,6 +94,46 @@ app.post('/api/excursions', async (req, res) => {
 app.delete('/api/excursions/:id', async (req, res) => {
     try {
         await pool.query('DELETE FROM excursions WHERE id = $1', [req.params.id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/bookings', async (req, res) => {
+    try {
+        const { excursionId, userName, answers } = req.body;
+        await pool.query(
+            'INSERT INTO bookings (excursion_id, user_name, answers, created_at) VALUES ($1, $2, $3, $4)',
+            [excursionId, userName || 'Гость', JSON.stringify(answers || []), new Date().toISOString()]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/bookings/:excursionId', async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            'SELECT * FROM bookings WHERE excursion_id = $1 ORDER BY created_at DESC',
+            [req.params.excursionId]
+        );
+        res.json(rows.map(r => ({
+            id: r.id,
+            excursionId: r.excursion_id,
+            userName: r.user_name,
+            answers: JSON.parse(r.answers || '[]'),
+            createdAt: r.created_at
+        })));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/bookings/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM bookings WHERE id = $1', [req.params.id]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
