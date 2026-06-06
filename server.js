@@ -151,3 +151,18 @@ app.get('*', (req, res) => {
 initDatabase().then(() => {
     app.listen(PORT, () => console.log(`Сервер: http://localhost:${PORT}`));
 });
+
+app.get('/api/bookings/all', async (req, res) => {
+    try {
+        const { rows } = await pool.query('SELECT * FROM bookings ORDER BY created_at DESC');
+        res.json(rows.map(r => ({
+            id: r.id,
+            excursionId: r.excursion_id,
+            userName: r.user_name,
+            answers: JSON.parse(r.answers || '[]'),
+            createdAt: r.created_at
+        })));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
