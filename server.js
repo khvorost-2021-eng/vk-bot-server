@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const { Pool } = require('pg');
 
 const app = express();
@@ -12,6 +13,7 @@ const pool = new Pool({
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Инициализация таблиц
 async function initDatabase() {
@@ -128,6 +130,11 @@ app.delete('/api/bookings/:id', async (req, res) => {
 app.post('/api/admin/check', (req, res) => {
     const ADMIN_ID = 123456789;
     res.json({ admin: req.body.userId === ADMIN_ID });
+});
+
+// Главная страница
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 initDatabase().then(() => {
