@@ -100,6 +100,7 @@ async function loadMyBookings() {
     try {
         await loadExcursions();
         const r = await fetch(`${API_URL}/bookings/all`);
+        if (!r.ok) throw new Error(`API error: ${r.status}`);
         const all = await r.json();
         myBookings = all.map(b => {
             const exc = excursions.find(e => e.id === b.excursionId);
@@ -110,7 +111,7 @@ async function loadMyBookings() {
                 userName: b.userName, answers: b.answers
             };
         });
-    } catch { myBookings = []; }
+    } catch (err) { console.error('Load bookings error:', err); myBookings = []; }
 }
 async function loadMyBookingsAndShow() { await loadMyBookings(); showMyBookings(); }
 
@@ -174,9 +175,14 @@ async function submitBooking(id) {
             else if(q.type==='checkbox') { const ch=[]; (q.options||[]).forEach((opt,oi)=>{ const cb=document.getElementById('answer_'+i+'_'+oi); if(cb&&cb.checked) ch.push(opt); }); answers.push({question:q.text,answer:ch.join(', ')||'Ничего не выбрано'}); }
         });
     }
-    const userName=answers.length>0?(answers[0].answer||'Гость'):'Гость';
-    try { await fetch(`${API_URL}/bookings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({excursionId:id,userName,answers})}); alert('Заявка отправлена!'); }
-    catch { alert('Ошибка при отправке заявки'); }
+    const userNameField=document.querySelector('input[type="text"]');
+    const userName=(userNameField&&userNameField.value)||'Гость';
+    try { 
+        const res = await fetch(`${API_URL}/bookings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({excursionId:id,userName,answers})});
+        if(!res.ok) throw new Error(`API error: ${res.status}`);
+        alert('Заявка отправлена!'); 
+    }
+    catch (err) { console.error('Booking error:', err); alert('Ошибка при отправке заявки'); }
     goToMain();
 }
 
