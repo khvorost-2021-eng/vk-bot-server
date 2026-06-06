@@ -79,7 +79,6 @@ app.get('/api/excursions', async (req, res) => {
         }
         res.json(excursions);
     } catch (err) {
-        console.error('❌ /api/excursions error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -103,7 +102,6 @@ app.post('/api/excursions', async (req, res) => {
         }
         res.json({ success: true, id: excursionId });
     } catch (err) {
-        console.error('❌ /api/excursions POST error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -113,7 +111,6 @@ app.delete('/api/excursions/:id', async (req, res) => {
         await pool.query('DELETE FROM excursions WHERE id = $1', [req.params.id]);
         res.json({ success: true });
     } catch (err) {
-        console.error('❌ /api/excursions DELETE error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -127,7 +124,6 @@ app.post('/api/bookings', async (req, res) => {
         );
         res.json({ success: true });
     } catch (err) {
-        console.error('❌ /api/bookings POST error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -146,7 +142,6 @@ app.get('/api/bookings/:excursionId', async (req, res) => {
             createdAt: r.created_at
         })));
     } catch (err) {
-        console.error('❌ /api/bookings/:id error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -156,7 +151,6 @@ app.delete('/api/bookings/:id', async (req, res) => {
         await pool.query('DELETE FROM bookings WHERE id = $1', [req.params.id]);
         res.json({ success: true });
     } catch (err) {
-        console.error('❌ /api/bookings DELETE error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -179,6 +173,55 @@ app.get('/api/bookings/all', async (req, res) => {
 
 app.post('/api/admin/check', (req, res) => {
     res.json({ admin: req.body.userId === 123456789 });
+});
+
+app.get('/api/health', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT NOW()');
+        res.json({ 
+            status: 'ok',
+            time: result.rows[0],
+            message: '✅ База данных доступна'
+        });
+    } catch (err) {
+        console.error('❌ Health check error:', err);
+        res.status(500).json({
+            status: 'error',
+            error: err.message,
+            code: err.code
+        });
+    }
+});
+
+app.get('/api/bookings/test', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public'
+        `);
+        const bookingsTable = result.rows.find(t => t.table_name === 'bookings');
+        
+        if (!bookingsTable) {
+            return res.status(500).json({
+                error: 'Table bookings does not exist',
+                tables: result.rows.map(t => t.table_name)
+            });
+        }
+
+        const bookings = await pool.query('SELECT COUNT(*) as count FROM bookings');
+        res.json({
+            status: 'ok',
+            bookingsCount: bookings.rows[0].count,
+            allTables: result.rows.map(t => t.table_name)
+        });
+    } catch (err) {
+        console.error('❌ Bookings test error:', err);
+        res.status(500).json({
+            error: err.message,
+            code: err.code
+        });
+    }
 });
 
 app.get('*', (req, res) => {
