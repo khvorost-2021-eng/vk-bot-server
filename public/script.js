@@ -22,32 +22,8 @@ function init() {
 }
 
 function initUserId() {
-    if (window.parent !== window) {
-        try {
-            if (window.TelegramWebApp) {
-                currentUserId = String(window.TelegramWebApp.initDataUnsafe?.user?.id || Math.random().toString(36).substr(2, 9));
-                console.log('✅ Telegram User ID:', currentUserId);
-            } else if (window.vkBridge) {
-                window.vkBridge.send('VKWebAppGetUserInfo').then(user => {
-                    currentUserId = String(user.id);
-                    console.log('✅ VK User ID:', currentUserId);
-                }).catch(err => {
-                    console.error('❌ VK Bridge error:', err);
-                    currentUserId = 'user_' + Math.random().toString(36).substr(2, 9);
-                    console.warn('⚠️ Using fallback ID:', currentUserId);
-                });
-            } else {
-                currentUserId = 'user_' + Math.random().toString(36).substr(2, 9);
-                console.warn('⚠️ Using fallback ID (no bridge):', currentUserId);
-            }
-        } catch (err) {
-            console.error('❌ initUserId error:', err);
-            currentUserId = 'user_' + Math.random().toString(36).substr(2, 9);
-        }
-    } else {
-        currentUserId = 'user_' + Math.random().toString(36).substr(2, 9);
-        console.warn('⚠️ Not in iframe, using fallback ID:', currentUserId);
-    }
+    currentUserId = 'user_' + Math.random().toString(36).substr(2, 9);
+    console.log('👤 User ID:', currentUserId);
 }
 
 function safeDate(d) { if(!d) return '—'; try { return new Date(d).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}); } catch { return '—'; } }
@@ -163,8 +139,9 @@ function showExcursionsList() {
     if(!excursions.length) { c.innerHTML='<h2>Экскурсии</h2><p style="color:#888;text-align:center;padding:40px 0">Пока нет доступных экскурсий</p>'; return; }
     let h='<h2>Экскурсии</h2>';
     excursions.forEach((exc,i)=>{
-        h+=`<div class="excursion-card" onclick="openScreen('excursion/${exc.id}')" style="animation-delay:${i*.08}s">
-            <div class="excursion-card-header"><div class="excursion-card-title">${safeText(exc.name,'Без названия')}</div><div class="excursion-card-price">${safePrice(exc.price)} ₽</div></div>
+        const isBooked = myBookings.some(b => b.excursionId === exc.id);
+        h+=`<div class="excursion-card" onclick="openScreen('excursion/${exc.id}')" style="animation-delay:${i*.08}s${isBooked ? ';border:2px solid #4CAF50' : ''}">
+            <div class="excursion-card-header"><div class="excursion-card-title">${safeText(exc.name,'Без названия')}${isBooked ? ' ✅' : ''}</div><div class="excursion-card-price">${safePrice(exc.price)} ₽</div></div>
             <div class="excursion-card-info"><div class="excursion-info-badge"><span class="badge-icon">📅</span> ${safeDate(exc.date)}</div><div class="excursion-info-badge"><span class="badge-icon">⏰</span> ${safeText(exc.time,'—')}</div><div class="max-people-badge"><span class="badge-icon">👥</span> ${safeMaxPeople(exc.maxPeople||exc.max_people)}</div></div>
             <div class="excursion-card-description">${safeText(exc.description,'')}</div>
             <div class="excursion-card-footer"><span>Запись открыта</span><span class="record-deadline">📆 до ${safeDate(exc.deadline)}</span></div></div>`;
