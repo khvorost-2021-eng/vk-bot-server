@@ -6,8 +6,18 @@ const { Pool } = require('pg');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+if (!process.env.DATABASE_URL) {
+    console.error('ERROR: DATABASE_URL is not set');
+    process.exit(1);
+}
+
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
+
+pool.on('error', (err) => {
+    console.error('Unexpected error on idle client', err);
 });
 
 app.use(cors());
@@ -15,40 +25,45 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 async function initDatabase() {
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS excursions (
-            id SERIAL PRIMARY KEY,
-            name TEXT NOT NULL,
-            description TEXT DEFAULT '',
-            date TEXT NOT NULL,
-            time TEXT NOT NULL,
-            price INTEGER NOT NULL,
-            deadline TEXT NOT NULL,
-            max_people TEXT DEFAULT '0'
-        )
-    `);
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS excursions (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                date TEXT NOT NULL,
+                time TEXT NOT NULL,
+                price INTEGER NOT NULL,
+                deadline TEXT NOT NULL,
+                max_people TEXT DEFAULT '0'
+            )
+        `);
 
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS questions (
-            id SERIAL PRIMARY KEY,
-            excursion_id INTEGER REFERENCES excursions(id) ON DELETE CASCADE,
-            text TEXT NOT NULL,
-            type TEXT NOT NULL DEFAULT 'text',
-            options TEXT DEFAULT '[]'
-        )
-    `);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS questions (
+                id SERIAL PRIMARY KEY,
+                excursion_id INTEGER REFERENCES excursions(id) ON DELETE CASCADE,
+                text TEXT NOT NULL,
+                type TEXT NOT NULL DEFAULT 'text',
+                options TEXT DEFAULT '[]'
+            )
+        `);
 
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS bookings (
-            id SERIAL PRIMARY KEY,
-            excursion_id INTEGER REFERENCES excursions(id) ON DELETE CASCADE,
-            user_name TEXT NOT NULL,
-            answers TEXT NOT NULL DEFAULT '[]',
-            created_at TEXT NOT NULL
-        )
-    `);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS bookings (
+                id SERIAL PRIMARY KEY,
+                excursion_id INTEGER REFERENCES excursions(id) ON DELETE CASCADE,
+                user_name TEXT NOT NULL,
+                answers TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL
+            )
+        `);
 
-    console.log('База данных готова');
+        console.log('✅ База данных готова');
+    } catch (err) {
+        console.error('❌ Database initialization error:', err.message);
+        throw err;
+    }
 }
 
 // === API ===
@@ -64,6 +79,7 @@ app.get('/api/excursions', async (req, res) => {
         }
         res.json(excursions);
     } catch (err) {
+        console.error('❌ /api/excursions error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -87,6 +103,7 @@ app.post('/api/excursions', async (req, res) => {
         }
         res.json({ success: true, id: excursionId });
     } catch (err) {
+        console.error('❌ /api/excursions POST error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -96,6 +113,7 @@ app.delete('/api/excursions/:id', async (req, res) => {
         await pool.query('DELETE FROM excursions WHERE id = $1', [req.params.id]);
         res.json({ success: true });
     } catch (err) {
+        console.error('❌ /api/excursions DELETE error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -109,6 +127,7 @@ app.post('/api/bookings', async (req, res) => {
         );
         res.json({ success: true });
     } catch (err) {
+        console.error('❌ /api/bookings POST error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -127,6 +146,7 @@ app.get('/api/bookings/:excursionId', async (req, res) => {
             createdAt: r.created_at
         })));
     } catch (err) {
+        console.error('❌ /api/bookings/:id error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -136,6 +156,7 @@ app.delete('/api/bookings/:id', async (req, res) => {
         await pool.query('DELETE FROM bookings WHERE id = $1', [req.params.id]);
         res.json({ success: true });
     } catch (err) {
+        console.error('❌ /api/bookings DELETE error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -151,7 +172,8 @@ app.get('/api/bookings/all', async (req, res) => {
             createdAt: r.created_at
         })));
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('❌ /api/bookings/all error:', err.message, err.code);
+        res.status(500).json({ error: err.message, code: err.code });
     }
 });
 
@@ -164,5 +186,8 @@ app.get('*', (req, res) => {
 });
 
 initDatabase().then(() => {
-    app.listen(PORT, () => console.log(`Сервер: http://localhost:${PORT}`));
+    app.listen(PORT, () => console.log(`✅ Сервер запущен: http://localhost:${PORT}`));
+}).catch((err) => {
+    console.error('❌ Failed to initialize database:', err);
+    process.exit(1);
 });
