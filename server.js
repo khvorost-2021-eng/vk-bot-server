@@ -53,7 +53,6 @@ async function initDatabase() {
             CREATE TABLE IF NOT EXISTS bookings (
                 id SERIAL PRIMARY KEY,
                 excursion_id INTEGER REFERENCES excursions(id) ON DELETE CASCADE,
-                user_id TEXT NOT NULL,
                 user_name TEXT NOT NULL,
                 answers TEXT NOT NULL DEFAULT '[]',
                 created_at TEXT NOT NULL
@@ -118,13 +117,10 @@ app.delete('/api/excursions/:id', async (req, res) => {
 
 app.post('/api/bookings', async (req, res) => {
     try {
-        const { excursionId, userId, userName, answers } = req.body;
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
+        const { excursionId, userName, answers } = req.body;
         await pool.query(
-            'INSERT INTO bookings (excursion_id, user_id, user_name, answers, created_at) VALUES ($1, $2, $3, $4, $5)',
-            [excursionId, userId, userName || 'Гость', JSON.stringify(answers || []), new Date().toISOString()]
+            'INSERT INTO bookings (excursion_id, user_name, answers, created_at) VALUES ($1, $2, $3, $4)',
+            [excursionId, userName || 'Гость', JSON.stringify(answers || []), new Date().toISOString()]
         );
         res.json({ success: true });
     } catch (err) {
@@ -147,7 +143,6 @@ app.get('/api/bookings/all', async (req, res) => {
         res.json(rows.map(r => ({
             id: r.id,
             excursionId: r.excursion_id,
-            userId: r.user_id,
             userName: r.user_name,
             answers: JSON.parse(r.answers || '[]'),
             createdAt: r.created_at
@@ -198,7 +193,6 @@ app.get('/api/bookings/:excursionId', async (req, res) => {
         res.json(rows.map(r => ({
             id: r.id,
             excursionId: r.excursion_id,
-            userId: r.user_id,
             userName: r.user_name,
             answers: JSON.parse(r.answers || '[]'),
             createdAt: r.created_at
