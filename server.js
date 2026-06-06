@@ -128,24 +128,6 @@ app.post('/api/bookings', async (req, res) => {
     }
 });
 
-app.get('/api/bookings/:excursionId', async (req, res) => {
-    try {
-        const { rows } = await pool.query(
-            'SELECT * FROM bookings WHERE excursion_id = $1 ORDER BY created_at DESC',
-            [req.params.excursionId]
-        );
-        res.json(rows.map(r => ({
-            id: r.id,
-            excursionId: r.excursion_id,
-            userName: r.user_name,
-            answers: JSON.parse(r.answers || '[]'),
-            createdAt: r.created_at
-        })));
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
 app.delete('/api/bookings/:id', async (req, res) => {
     try {
         await pool.query('DELETE FROM bookings WHERE id = $1', [req.params.id]);
@@ -168,28 +150,6 @@ app.get('/api/bookings/all', async (req, res) => {
     } catch (err) {
         console.error('❌ /api/bookings/all error:', err.message, err.code);
         res.status(500).json({ error: err.message, code: err.code });
-    }
-});
-
-app.post('/api/admin/check', (req, res) => {
-    res.json({ admin: req.body.userId === 123456789 });
-});
-
-app.get('/api/health', async (req, res) => {
-    try {
-        const result = await pool.query('SELECT NOW()');
-        res.json({ 
-            status: 'ok',
-            time: result.rows[0],
-            message: '✅ База данных доступна'
-        });
-    } catch (err) {
-        console.error('❌ Health check error:', err);
-        res.status(500).json({
-            status: 'error',
-            error: err.message,
-            code: err.code
-        });
     }
 });
 
@@ -218,6 +178,46 @@ app.get('/api/bookings/test', async (req, res) => {
     } catch (err) {
         console.error('❌ Bookings test error:', err);
         res.status(500).json({
+            error: err.message,
+            code: err.code
+        });
+    }
+});
+
+app.get('/api/bookings/:excursionId', async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            'SELECT * FROM bookings WHERE excursion_id = $1 ORDER BY created_at DESC',
+            [req.params.excursionId]
+        );
+        res.json(rows.map(r => ({
+            id: r.id,
+            excursionId: r.excursion_id,
+            userName: r.user_name,
+            answers: JSON.parse(r.answers || '[]'),
+            createdAt: r.created_at
+        })));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/check', (req, res) => {
+    res.json({ admin: req.body.userId === 123456789 });
+});
+
+app.get('/api/health', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT NOW()');
+        res.json({ 
+            status: 'ok',
+            time: result.rows[0],
+            message: '✅ База данных доступна'
+        });
+    } catch (err) {
+        console.error('❌ Health check error:', err);
+        res.status(500).json({
+            status: 'error',
             error: err.message,
             code: err.code
         });
