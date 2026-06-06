@@ -335,13 +335,12 @@ async function submitBooking(id) {
     }
 
     const userName = answers.length > 0 ? (answers[0].answer || 'Гость') : 'Гость';
-    const userId = getUserId();
 
     try {
         await fetch(`${API_URL}/bookings`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ excursionId: id, userId, userName, answers })
+            body: JSON.stringify({ excursionId: id, userName, answers })
         });
         alert('Заявка отправлена!');
     } catch (err) {
@@ -349,7 +348,6 @@ async function submitBooking(id) {
     }
     goToMain();
 }
-
 // --- МОИ ЗАПИСИ ---
 function showMyBookings() {
     const content = document.getElementById('content');
