@@ -140,18 +140,6 @@ app.delete('/api/bookings/:id', async (req, res) => {
     }
 });
 
-app.post('/api/admin/check', (req, res) => {
-    res.json({ admin: req.body.userId === 123456789 });
-});
-
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-initDatabase().then(() => {
-    app.listen(PORT, () => console.log(`Сервер: http://localhost:${PORT}`));
-});
-
 app.get('/api/bookings/all', async (req, res) => {
     try {
         const { rows } = await pool.query('SELECT * FROM bookings ORDER BY created_at DESC');
@@ -165,4 +153,16 @@ app.get('/api/bookings/all', async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+});
+
+app.post('/api/admin/check', (req, res) => {
+    res.json({ admin: req.body.userId === 123456789 });
+});
+
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+initDatabase().then(() => {
+    app.listen(PORT, () => console.log(`Сервер: http://localhost:${PORT}`));
 });
