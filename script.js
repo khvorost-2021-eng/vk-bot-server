@@ -1,5 +1,5 @@
 // Глобальные переменные
-const API_URL = 'http://localhost:3000/api';
+const API_URL = 'https://vk-bot-server.onrender.com';
 let questions = [];
 let savedName = '';
 let savedDescription = '';
