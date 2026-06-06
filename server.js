@@ -44,11 +44,15 @@ async function initDatabase() {
         CREATE TABLE IF NOT EXISTS bookings (
             id SERIAL PRIMARY KEY,
             excursion_id INTEGER REFERENCES excursions(id) ON DELETE CASCADE,
+            user_id TEXT DEFAULT 'anonymous',
             user_name TEXT NOT NULL,
             answers TEXT NOT NULL DEFAULT '[]',
             created_at TEXT NOT NULL
         )
     `);
+
+    // Добавляем колонку user_id, если её ещё нет
+    await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS user_id TEXT DEFAULT 'anonymous'`);
 
     console.log('База данных готова');
 }
@@ -107,13 +111,91 @@ app.delete('/api/excursions/:id', async (req, res) => {
     }
 });
 
+// Получить ВСЕ заявки (для админа)
+app.get('/api/bookings', async (req, res) => {
+    try {
+        const { rows } = await pool.query(`
+            SELECT b.*, e.name as excursion_name, e.date, e.time 
+            FROM bookings b 
+            JOIN excursions e ON b.excursion_id = e.id 
+            ORDER BY b.created_at DESC
+        `);
+        res.json(rows.map(r => ({
+            id: r.id,
+            excursionId: r.excursion_id,
+            excursionName: r.excursion_name,
+            date: r.date,
+            time: r.time,
+            userName: r.user_name,
+            answers: JSON.parse(r.answers || '[]'),
+            createdAt: r.created_at
+        })));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Получить заявки ТОЛЬКО текущего пользователя
+app.get('/api/my-bookings', async (req, res) => {
+    try {
+        const userId = req.query.userId;
+        if (!userId) return res.json([]);
+
+        const { rows } = await pool.query(`
+            SELECT b.*, e.name as excursion_name, e.date, e.time 
+            FROM bookings b 
+            JOIN excursions e ON b.excursion_id = e.id 
+            WHERE b.user_id = $1
+            ORDER BY b.created_at DESC
+        `, [userId]);
+        
+        res.json(rows.map(r => ({
+            id: r.id,
+            excursionId: r.excursion_id,
+            excursionName: r.excursion_name,
+            date: r.date,
+            time: r.time,
+            userName: r.user_name,
+            answers: JSON.parse(r.answers || '[]'),
+            createdAt: r.created_at
+        })));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Получить заявки по экскурсии (для админа)
+app.get('/api/bookings/:excursionId', async (req, res) => {
+    try {
+        const { rows } = await pool.query(`
+            SELECT b.*, e.name as excursion_name, e.date, e.time 
+            FROM bookings b 
+            JOIN excursions e ON b.excursion_id = e.id 
+            WHERE b.excursion_id = $1
+            ORDER BY b.created_at DESC
+        `, [req.params.excursionId]);
+        res.json(rows.map(r => ({
+            id: r.id,
+            excursionId: r.excursion_id,
+            excursionName: r.excursion_name,
+            date: r.date,
+            time: r.time,
+            userName: r.user_name,
+            answers: JSON.parse(r.answers || '[]'),
+            createdAt: r.created_at
+        })));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Отправить заявку
 app.post('/api/bookings', async (req, res) => {
     try {
-        const { excursionId, userName, answers } = req.body;
+        const { excursionId, userId, userName, answers } = req.body;
         await pool.query(
-            'INSERT INTO bookings (excursion_id, user_name, answers, created_at) VALUES ($1, $2, $3, $4)',
-            [excursionId, userName, JSON.stringify(answers || []), new Date().toISOString()]
+            'INSERT INTO bookings (excursion_id, user_id, user_name, answers, created_at) VALUES ($1, $2, $3, $4, $5)',
+            [excursionId, userId || 'anonymous', userName, JSON.stringify(answers || []), new Date().toISOString()]
         );
         res.json({ success: true });
     } catch (err) {
@@ -121,43 +203,13 @@ app.post('/api/bookings', async (req, res) => {
     }
 });
 
-// Получить все заявки
-app.get('/api/bookings', async (req, res) => {
-    try {
-        const { rows } = await pool.query('SELECT * FROM bookings ORDER BY created_at DESC');
-        res.json(rows.map(r => ({
-            id: r.id,
-            excursionId: r.excursion_id,
-            excursionName: '',
-            userName: r.user_name,
-            answers: JSON.parse(r.answers || '[]'),
-            createdAt: r.created_at
-        })));
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Получить заявки по экскурсии
-app.get('/api/bookings/:excursionId', async (req, res) => {
-    try {
-        const { rows } = await pool.query('SELECT * FROM bookings WHERE excursion_id = $1 ORDER BY created_at DESC', [req.params.excursionId]);
-        res.json(rows.map(r => ({
-            id: r.id,
-            excursionId: r.excursion_id,
-            userName: r.user_name,
-            answers: JSON.parse(r.answers || '[]'),
-            createdAt: r.created_at
-        })));
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Отменить заявку
+// Отменить заявку (только свою)
 app.delete('/api/bookings/:id', async (req, res) => {
     try {
-        await pool.query('DELETE FROM bookings WHERE id = $1', [req.params.id]);
+        const userId = req.query.userId;
+        if (!userId) return res.status(400).json({ error: 'userId required' });
+        
+        await pool.query('DELETE FROM bookings WHERE id = $1 AND user_id = $2', [req.params.id, userId]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });

@@ -21,6 +21,12 @@ function init() {
     checkAdmin();
 }
 
+// Получить ID пользователя ВК
+function getUserId() {
+    if (window.user && window.user.id) return window.user.id;
+    return 'test_user_' + Date.now();
+}
+
 // --- Безопасные форматировщики ---
 function safeDate(dateStr) {
     if (!dateStr) return '—';
@@ -170,7 +176,6 @@ async function loadExcursions() {
         const response = await fetch(`${API_URL}/excursions`);
         excursions = await response.json();
     } catch (err) {
-        console.error('Ошибка загрузки экскурсий:', err);
         excursions = [];
     }
 }
@@ -182,10 +187,10 @@ async function loadExcursionsAndShow() {
 
 async function loadMyBookings() {
     try {
-        const response = await fetch(`${API_URL}/bookings`);
+        const userId = getUserId();
+        const response = await fetch(`${API_URL}/my-bookings?userId=${userId}`);
         myBookings = await response.json();
     } catch (err) {
-        console.error('Ошибка загрузки записей:', err);
         myBookings = [];
     }
 }
@@ -330,16 +335,16 @@ async function submitBooking(id) {
     }
 
     const userName = answers.length > 0 ? (answers[0].answer || 'Гость') : 'Гость';
+    const userId = getUserId();
 
     try {
         await fetch(`${API_URL}/bookings`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ excursionId: id, userName, answers })
+            body: JSON.stringify({ excursionId: id, userId, userName, answers })
         });
         alert('Заявка отправлена!');
     } catch (err) {
-        console.error('Ошибка отправки:', err);
         alert('Ошибка при отправке заявки');
     }
     goToMain();
@@ -358,7 +363,7 @@ function showMyBookings() {
         html += `
             <div class="excursion-card" style="animation-delay: ${index * 0.08}s;">
                 <div class="excursion-card-header">
-                    <div class="excursion-card-title">${safeText(booking.excursionName || booking.excursion_name, 'Без названия')}</div>
+                    <div class="excursion-card-title">${safeText(booking.excursionName, 'Без названия')}</div>
                 </div>
                 <div class="excursion-card-info">
                     <div class="excursion-info-badge"><span class="badge-icon">📅</span> ${safeDate(booking.date)}</div>
@@ -376,7 +381,8 @@ function showMyBookings() {
 async function cancelBooking(bookingId) {
     if (confirm('Вы уверены, что хотите отменить запись?')) {
         try {
-            await fetch(`${API_URL}/bookings/${bookingId}`, { method: 'DELETE' });
+            const userId = getUserId();
+            await fetch(`${API_URL}/bookings/${bookingId}?userId=${userId}`, { method: 'DELETE' });
         } catch (err) {
             console.error('Ошибка отмены:', err);
         }
@@ -411,7 +417,7 @@ function showAllRequests() {
     let html = '<h2>Заявки</h2>';
     
     excursions.forEach((exc, index) => {
-        const bookingsForExcursion = myBookings.filter(b => b.excursionId === exc.id || b.excursion_id === exc.id);
+        const bookingsForExcursion = myBookings.filter(b => b.excursionId === exc.id);
         html += `
             <div class="excursion-card" style="animation-delay: ${index * 0.08}s;">
                 <div class="excursion-card-header">
@@ -423,7 +429,7 @@ function showAllRequests() {
                     <div class="excursion-info-badge"><span class="badge-icon">⏰</span> ${safeText(exc.time, '—')}</div>
                 </div>
                 <div style="display: flex; gap: 8px; margin-top: 10px;">
-                    <button class="save-form-btn" style="flex: 1;" onclick="event.stopPropagation(); openScreen('requestDetail/${exc.id}')">👁 Смотреть заявки</button>
+                    <button class="save-form-btn" style="flex: 1;" onclick="event.stopPropagation(); openScreen('requestDetail/${exc.id}')">👁 Смотреть</button>
                     <button class="cancel-booking-btn" style="flex: 1;" onclick="event.stopPropagation(); deleteExcursion(${exc.id})">🗑 Удалить</button>
                 </div>
             </div>
@@ -441,7 +447,6 @@ async function deleteExcursion(id) {
         excursions = excursions.filter(e => e.id !== id);
         showAllRequests();
     } catch (err) {
-        console.error('Ошибка удаления:', err);
         alert('Ошибка при удалении');
     }
 }
@@ -453,7 +458,7 @@ function showRequestDetail(excursionId) {
     
     const content = document.getElementById('content');
     if (!content) return;
-    const bookingsForExcursion = myBookings.filter(b => b.excursionId === excursionId || b.excursion_id === excursionId);
+    const bookingsForExcursion = myBookings.filter(b => b.excursionId === excursionId);
     
     let html = `
         <h2>Заявки: ${safeText(exc.name, 'Без названия')}</h2>
@@ -498,7 +503,7 @@ function showUserAnswers(bookingId) {
         <h2>Заявка #${booking.id}</h2>
         <div class="excursion-card" style="cursor: default; margin-bottom: 20px;">
             <div class="excursion-card-header">
-                <div class="excursion-card-title">${safeText(booking.excursionName || booking.excursion_name, 'Без названия')}</div>
+                <div class="excursion-card-title">${safeText(booking.excursionName, 'Без названия')}</div>
             </div>
             <div class="excursion-card-info">
                 <div class="excursion-info-badge"><span class="badge-icon">📅</span> ${safeDate(booking.date)}</div>
@@ -613,10 +618,7 @@ function renderQuestion(q, index) {
     `;
 }
 
-function addQuestion() {
-    questions.push({ text: '', type: 'text', options: [] });
-    showExcursionStep2();
-}
+function addQuestion() { questions.push({ text: '', type: 'text', options: [] }); showExcursionStep2(); }
 function removeQuestion(index) { questions.splice(index, 1); showExcursionStep2(); }
 function updateQuestionText(index, value) { questions[index].text = value; }
 function updateQuestionType(index, value) {
@@ -624,11 +626,7 @@ function updateQuestionType(index, value) {
     if (value === 'radio' || value === 'checkbox') questions[index].options = questions[index].options || [''];
     showExcursionStep2();
 }
-function addOption(index) {
-    questions[index].options = questions[index].options || [];
-    questions[index].options.push('');
-    showExcursionStep2();
-}
+function addOption(index) { questions[index].options = questions[index].options || []; questions[index].options.push(''); showExcursionStep2(); }
 function removeOption(qi, oi) { questions[qi].options.splice(oi, 1); showExcursionStep2(); }
 function updateOption(qi, oi, value) { questions[qi].options[oi] = value; }
 
@@ -643,31 +641,16 @@ async function saveExcursion() {
     if (!savedName) { alert('Введите название экскурсии'); return; }
 
     const excursionData = {
-        name: savedName,
-        description: savedDescription,
-        date: savedDate,
-        time: savedTime,
-        price: parseInt(savedPrice),
-        deadline: savedDeadline,
-        maxPeople: savedMaxPeople || '0',
-        questions
+        name: savedName, description: savedDescription, date: savedDate, time: savedTime,
+        price: parseInt(savedPrice), deadline: savedDeadline, maxPeople: savedMaxPeople || '0', questions
     };
 
     try {
-        await fetch(`${API_URL}/excursions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(excursionData)
-        });
+        await fetch(`${API_URL}/excursions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(excursionData) });
         alert(`Экскурсия "${savedName}" сохранена!`);
-    } catch (err) {
-        console.error('Ошибка сохранения:', err);
-        alert('Ошибка при сохранении');
-    }
+    } catch (err) { alert('Ошибка при сохранении'); }
 
-    if (savedSaveAsTemplate) {
-        templates.push({ name: savedName, description: savedDescription, questions: JSON.parse(JSON.stringify(questions)) });
-    }
+    if (savedSaveAsTemplate) templates.push({ name: savedName, description: savedDescription, questions: JSON.parse(JSON.stringify(questions)) });
     goToMain();
 }
 
@@ -680,24 +663,17 @@ function showTemplatesList() {
         return;
     }
     let html = '<h2>Выберите шаблон</h2>';
-    templates.forEach((tpl, index) => {
-        html += `<div class="template-card" onclick="useTemplate(${index})"><h3>${tpl.name}</h3><p>${tpl.description || 'Без описания'} — ${tpl.questions.length} вопросов</p></div>`;
-    });
+    templates.forEach((tpl, index) => { html += `<div class="template-card" onclick="useTemplate(${index})"><h3>${tpl.name}</h3><p>${tpl.description || 'Без описания'} — ${tpl.questions.length} вопросов</p></div>`; });
     content.innerHTML = html;
 }
 
 function useTemplate(index) {
     const tpl = templates[index];
-    savedName = tpl.name;
-    savedDescription = tpl.description || '';
-    questions = JSON.parse(JSON.stringify(tpl.questions));
-    savedSaveAsTemplate = false;
+    savedName = tpl.name; savedDescription = tpl.description || '';
+    questions = JSON.parse(JSON.stringify(tpl.questions)); savedSaveAsTemplate = false;
     showExcursionStep2();
 }
 
-function checkAdmin() { 
-    const btn = document.getElementById('adminBtn');
-    if (btn) btn.style.display = 'block'; 
-}
+function checkAdmin() { const btn = document.getElementById('adminBtn'); if (btn) btn.style.display = 'block'; }
 
 window.addEventListener('DOMContentLoaded', init);
